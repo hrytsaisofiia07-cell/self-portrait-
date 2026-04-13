@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Интерактивное лицо</title>
+<title>Interactive Face</title>
 
 <style>
   body {
@@ -13,7 +13,6 @@
     justify-content: center;
     align-items: center;
     height: 100vh;
-    overflow: hidden;
     font-family: sans-serif;
   }
 
@@ -25,7 +24,6 @@
     max-height: 800px;
   }
 
-  /* Глаза */
   .eye {
     position: absolute;
     width: 60px;
@@ -49,23 +47,25 @@
   .eye.left { left: 25%; top: 30%; }
   .eye.right { right: 25%; top: 30%; }
 
-  /* Брови */
   .brow {
     position: absolute;
     width: 100px;
     height: 20px;
     background: #5a2e2e;
-    transform: skew(-20deg);
   }
 
-  .brow.left { left: 20%; top: 22%; }
+  .brow.left {
+    left: 20%;
+    top: 22%;
+    transform: rotate(-15deg);
+  }
+
   .brow.right {
     right: 20%;
     top: 22%;
-    transform: skew(20deg);
+    transform: rotate(15deg);
   }
 
-  /* Рот */
   .mouth {
     position: absolute;
     bottom: 25%;
@@ -76,7 +76,6 @@
     background: pink;
     border: 3px solid red;
     border-radius: 50%;
-    transition: transform 0.1s linear;
   }
 
   .teeth {
@@ -90,8 +89,7 @@
     border-radius: 5px;
   }
 
-  /* Кнопка */
-  .start-btn {
+  button {
     position: fixed;
     bottom: 20px;
     padding: 15px 25px;
@@ -100,6 +98,14 @@
     border-radius: 10px;
     background: black;
     color: white;
+  }
+
+  .fallback {
+    position: fixed;
+    top: 20px;
+    color: red;
+    text-align: center;
+    width: 100%;
   }
 </style>
 </head>
@@ -118,61 +124,127 @@
   </div>
 </div>
 
-<button class="start-btn" id="startBtn">Начать 🎭</button>
+<div id="fallback" class="fallback"></div>
 
-<audio id="scream" loop>
-  <source src="https://www.soundjay.com/human/sounds/scream-01.mp3" type="audio/mpeg">
-</audio>
+<button id="startBtn">Начать 🎭</button>
 
 <script>
-let audio = document.getElementById("scream");
-let mouth = document.getElementById("mouth");
+/* =========================
+   УТИЛИТЫ
+========================= */
+const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/* =========================
+   ПЕРЕМЕННЫЕ
+========================= */
+let audioCtx, osc, gainNode;
 let started = false;
 
+let intensity = 0;
+let smoothed = 0;
+
+const maxTilt = 90;
+
+/* =========================
+   AUDIO INIT
+========================= */
+function initAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  osc = audioCtx.createOscillator();
+  gainNode = audioCtx.createGain();
+
+  osc.type = "sawtooth";
+  osc.frequency.value = 200;
+
+  gainNode.gain.value = 0;
+
+  osc.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  osc.start();
+}
+
+/* =========================
+   ORIENTATION
+========================= */
+function handleOrientation(event) {
+  if (!started) return;
+
+  const beta = event.beta || 0;
+  const gamma = event.gamma || 0;
+
+  // интенсивность
+  intensity = clamp((Math.abs(beta) + Math.abs(gamma)) / maxTilt, 0, 1);
+
+  // сглаживание
+  smoothed = lerp(smoothed, intensity, 0.1);
+
+  updateVisuals();
+  updateAudio();
+}
+
+/* =========================
+   ВИЗУАЛ
+========================= */
+const mouth = document.getElementById("mouth");
+
+function updateVisuals() {
+  const scale = 1 + smoothed * 2;
+  mouth.style.transform = `translateX(-50%) scaleY(${scale})`;
+}
+
+/* =========================
+   AUDIO UPDATE
+========================= */
+function updateAudio() {
+  if (!audioCtx) return;
+
+  const now = audioCtx.currentTime;
+
+  const frequency = 200 + smoothed * 1000;
+  const volume = Math.pow(smoothed, 2);
+
+  osc.frequency.setTargetAtTime(frequency, now, 0.05);
+  gainNode.gain.setTargetAtTime(volume, now, 0.05);
+}
+
+/* =========================
+   START
+========================= */
 document.getElementById("startBtn").onclick = async () => {
   document.getElementById("startBtn").style.display = "none";
 
-  // iOS разрешение
+  // iOS permission
   if (typeof DeviceOrientationEvent.requestPermission === "function") {
     try {
-      await DeviceOrientationEvent.requestPermission();
-    } catch (e) {
-      alert("Нет доступа к датчикам");
+      const response = await DeviceOrientationEvent.requestPermission();
+      if (response !== "granted") {
+        document.getElementById("fallback").innerText = "Нет доступа к датчикам";
+        return;
+      }
+    } catch {
+      document.getElementById("fallback").innerText = "Ошибка доступа";
+      return;
     }
   }
 
-  audio.play().then(() => {
-    audio.pause(); // запускаем, но сразу ставим на паузу
-  });
+  // audio init
+  initAudio();
 
   started = true;
+
+  window.addEventListener("deviceorientation", handleOrientation);
 };
 
-window.addEventListener("deviceorientation", (event) => {
-  if (!started) return;
-
-  let tilt = Math.abs(event.beta) + Math.abs(event.gamma);
-
-  // Нормализация
-  let intensity = Math.min(tilt / 90, 1);
-
-  // Масштаб рта
-  let scale = 1 + intensity * 2.5;
-  mouth.style.transform = `translateX(-50%) scaleY(${scale})`;
-
-  // Громкость
-  audio.volume = intensity;
-
-  // Запуск звука при движении
-  if (intensity > 0.2 && audio.paused) {
-    audio.play();
-  }
-
-  // Пауза если нет движения
-  if (intensity < 0.1 && !audio.paused) {
-    audio.pause();
-  }
-});
+/* =========================
+   FALLBACK
+========================= */
+if (!window.DeviceOrientationEvent) {
+  document.getElementById("fallback").innerText =
+    "Датчики не поддерживаются на этом устройстве";
+}
 </script>
 
 </body>

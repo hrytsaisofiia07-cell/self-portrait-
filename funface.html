@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Интерактивное лицо</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #b8acd0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+    font-family: sans-serif;
+  }
+
+  .face {
+    position: relative;
+    width: 90vw;
+    height: 90vh;
+    max-width: 500px;
+    max-height: 800px;
+  }
+
+  /* Глаза */
+  .eye {
+    position: absolute;
+    width: 60px;
+    height: 80px;
+    background: black;
+    border-radius: 50%;
+    border: 3px solid #1da1f2;
+  }
+
+  .eye::after {
+    content: "";
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    top: 10px;
+    left: 10px;
+  }
+
+  .eye.left { left: 25%; top: 30%; }
+  .eye.right { right: 25%; top: 30%; }
+
+  /* Брови */
+  .brow {
+    position: absolute;
+    width: 100px;
+    height: 20px;
+    background: #5a2e2e;
+    transform: skew(-20deg);
+  }
+
+  .brow.left { left: 20%; top: 22%; }
+  .brow.right {
+    right: 20%;
+    top: 22%;
+    transform: skew(20deg);
+  }
+
+  /* Рот */
+  .mouth {
+    position: absolute;
+    bottom: 25%;
+    left: 50%;
+    transform: translateX(-50%) scaleY(1);
+    width: 200px;
+    height: 100px;
+    background: pink;
+    border: 3px solid red;
+    border-radius: 50%;
+    transition: transform 0.1s linear;
+  }
+
+  .teeth {
+    position: absolute;
+    width: 50px;
+    height: 30px;
+    background: white;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 5px;
+  }
+
+  /* Кнопка */
+  .start-btn {
+    position: fixed;
+    bottom: 20px;
+    padding: 15px 25px;
+    font-size: 18px;
+    border: none;
+    border-radius: 10px;
+    background: black;
+    color: white;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="face">
+  <div class="brow left"></div>
+  <div class="brow right"></div>
+
+  <div class="eye left"></div>
+  <div class="eye right"></div>
+
+  <div class="mouth" id="mouth">
+    <div class="teeth"></div>
+  </div>
+</div>
+
+<button class="start-btn" id="startBtn">Начать 🎭</button>
+
+<audio id="scream" loop>
+  <source src="https://www.soundjay.com/human/sounds/scream-01.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+let audio = document.getElementById("scream");
+let mouth = document.getElementById("mouth");
+let started = false;
+
+document.getElementById("startBtn").onclick = async () => {
+  document.getElementById("startBtn").style.display = "none";
+
+  // iOS разрешение
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
+    try {
+      await DeviceOrientationEvent.requestPermission();
+    } catch (e) {
+      alert("Нет доступа к датчикам");
+    }
+  }
+
+  audio.play().then(() => {
+    audio.pause(); // запускаем, но сразу ставим на паузу
+  });
+
+  started = true;
+};
+
+window.addEventListener("deviceorientation", (event) => {
+  if (!started) return;
+
+  let tilt = Math.abs(event.beta) + Math.abs(event.gamma);
+
+  // Нормализация
+  let intensity = Math.min(tilt / 90, 1);
+
+  // Масштаб рта
+  let scale = 1 + intensity * 2.5;
+  mouth.style.transform = `translateX(-50%) scaleY(${scale})`;
+
+  // Громкость
+  audio.volume = intensity;
+
+  // Запуск звука при движении
+  if (intensity > 0.2 && audio.paused) {
+    audio.play();
+  }
+
+  // Пауза если нет движения
+  if (intensity < 0.1 && !audio.paused) {
+    audio.pause();
+  }
+});
+</script>
+
+</body>
+</html>
